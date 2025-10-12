@@ -76,6 +76,99 @@ whoop.login()
 
 The SDK automatically handles token refresh, so you only need to authenticate once!
 
+## API Usage Examples
+
+### Get User Profile
+```python
+from whoop_sdk import Whoop
+
+whoop = Whoop()
+whoop.login()  # One-time authentication
+
+# Get basic profile information
+profile = whoop.get_profile()
+print(f"Hello {profile['first_name']} {profile['last_name']}!")
+print(f"User ID: {profile['user_id']}")
+print(f"Email: {profile['email']}")
+```
+
+### Get Recovery Data
+```python
+# Get recent recovery data (last 10 records)
+recovery = whoop.get_recovery()
+print(f"Found {len(recovery.get('records', []))} recovery records")
+
+# Get recovery data for a specific date range
+from datetime import datetime, timedelta
+
+end_date = datetime.now()
+start_date = end_date - timedelta(days=7)
+
+recovery_data = whoop.get_recovery(
+    start=start_date.isoformat() + "Z",
+    end=end_date.isoformat() + "Z",
+    limit=25
+)
+```
+
+### Get Sleep Data
+```python
+# Get recent sleep data
+sleep = whoop.get_sleep()
+print(f"Found {len(sleep.get('records', []))} sleep records")
+
+# Get sleep data for the past week
+sleep_data = whoop.get_sleep(
+    start=start_date.isoformat() + "Z",
+    end=end_date.isoformat() + "Z"
+)
+```
+
+### Get Workout Data
+```python
+# Get recent workout data
+workouts = whoop.get_workout()
+print(f"Found {len(workouts.get('records', []))} workout records")
+
+# Get workout data with custom parameters
+workout_data = whoop.get_workout(
+    start=start_date.isoformat() + "Z",
+    end=end_date.isoformat() + "Z",
+    limit=15
+)
+```
+
+### Complete Example
+```python
+from whoop_sdk import Whoop
+from datetime import datetime, timedelta
+
+# Initialize and authenticate
+whoop = Whoop()
+whoop.login()
+
+# Get user profile
+profile = whoop.get_profile()
+print(f"Welcome, {profile['first_name']}!")
+
+# Get data for the past week
+end_date = datetime.now()
+start_date = end_date - timedelta(days=7)
+date_range = {
+    "start": start_date.isoformat() + "Z",
+    "end": end_date.isoformat() + "Z"
+}
+
+# Fetch all data types
+recovery = whoop.get_recovery(**date_range)
+sleep = whoop.get_sleep(**date_range)
+workouts = whoop.get_workout(**date_range)
+
+print(f"Recovery records: {len(recovery.get('records', []))}")
+print(f"Sleep records: {len(sleep.get('records', []))}")
+print(f"Workout records: {len(workouts.get('records', []))}")
+```
+
 ## Open Source
 
 This project is open source and welcomes contributions from the community! 
