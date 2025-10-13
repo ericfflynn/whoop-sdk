@@ -29,9 +29,9 @@ jobs:
     - name: Build package
       run: python -m build
     
-    - name: Publish to PyPI Test
+    - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        repository-url: https://test.pypi.org/legacy/
-        password: ${{ secrets.PYPI_TEST_TOKEN }}
-        skip-existing: true  # Don't fail if version already exists
+        repository-url: https://upload.pypi.org/legacy/
+        password: ${{ secrets.PYPI_TOKEN }}
+        skip-existing: true
