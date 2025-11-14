@@ -19,7 +19,9 @@ Before using this SDK, you'll need to create a developer application on WHOOP's 
 2. Sign up or log in to your WHOOP account
 3. Create a new application
 4. Note down your **Client ID** and **Client Secret**
-5. Set your redirect URI to `https://www.google.com` (or your preferred redirect URL)
+5. Add BOTH redirect URIs to your application:
+   - `http://localhost:8080` (for automated OAuth flow)
+   - `https://www.google.com` (fallback for manual authorization)
 
 The SDK will request the following scopes:
 - `offline` - For refresh token access
@@ -27,6 +29,8 @@ The SDK will request the following scopes:
 - `read:recovery` - Read recovery data
 - `read:sleep` - Read sleep data
 - `read:workout` - Read workout data
+- `read:cycles` - Read cycle data
+- `read:body_measurement` - Read body measurements
 
 ### 2. Installation
 
@@ -38,7 +42,7 @@ pip install whoop-sdk
 
 ### 3. Configuration & Authentication
 
-The SDK supports three ways to provide your credentials:
+The SDK supports two ways to provide your credentials:
 
 #### Option 1: Environment Variables (Recommended)
 ```bash
@@ -53,7 +57,22 @@ If no environment variables are found, the SDK will prompt you for credentials o
 > - **macOS**: `/Users/YourUsername/.whoop_sdk/`
 > - **Linux**: `/home/YourUsername/.whoop_sdk/`
 
-### 4. Quick Start
+### 4. OAuth Authentication Flow
+
+When you call `whoop.login()`, the SDK uses an **automated OAuth flow** that requires no manual copy-paste:
+
+1. The SDK starts a localhost server on port 8080 to capture the OAuth callback
+2. Your browser automatically opens to the WHOOP authorization page
+3. After you approve access, the authorization completes automatically
+4. You can close the browser window - no need to copy any codes!
+
+**Manual Fallback**: If the automated flow is unavailable (e.g., port 8080 is in use), the SDK automatically falls back to a manual method where you'll copy the authorization code from the redirect URL. This backup method uses `https://www.google.com` as the redirect URI.
+
+Important: Ensure BOTH redirect URIs are whitelisted in your WHOOP app settings: `http://localhost:8080` and `https://www.google.com`.
+
+The SDK automatically manages token refresh, so you only need to complete the OAuth flow once. Tokens are saved to `.whoop_sdk/config.json` for future use and automatically rotated for you.
+
+### 5. Quick Start
 
 Here's a basic example to get you started:
 
@@ -67,26 +86,10 @@ whoop.login()
 # Your tokens are now saved and ready to use!
 ```
 
-#### What happens during login:
-
-1. The SDK opens your browser to the WHOOP authorization page
-2. You'll be redirected to `https://www.google.com/?code=XXXX&state=whoop_sdk_state_12345`
-3. Copy the `code` parameter from the URL and paste it when prompted
-4. The SDK exchanges the code for access and refresh tokens
-5. Tokens are saved to your home directory in `.whoop_sdk/config.json` for future use
-
-The SDK automatically manages token refresh, so you only need to complete this OAuth flow once.
-
 ## API Usage Examples
 
 ### Get User Profile
 ```python
-from whoop_sdk import Whoop
-
-# Initialize and authenticate
-whoop = Whoop()
-whoop.login()
-
 # Get basic profile information
 profile = whoop.get_profile()
 print(f"Hello {profile['first_name']} {profile['last_name']}!")
@@ -94,77 +97,126 @@ print(f"User ID: {profile['user_id']}")
 print(f"Email: {profile['email']}")
 ```
 
+### Get Body Measurements
+```python
+# Body measurements (single object, not paginated)
+body = whoop.get_body_measurements()
+print(f"Height: {body.get('height_meter')} m")
+print(f"Weight: {body.get('weight_kilogram')} kg")
+print(f"Max Heart Rate: {body.get('max_heart_rate')} bpm")
+```
+
+## Pagination
+
+All list-style endpoints support pagination with the following defaults:
+
+- **Default page size**: 10 records per page (WHOOP API default)
+- **Default max pages**: 3 pages maximum (30 records total)
+- **Maximum page size**: 25 records per page (WHOOP API limit)
+
+**Important**: Even when you specify a date range, the default pagination limits still apply. For example, if you request data for more than a 30-day period, you'll only get the first 30 records (3 pages × 10 records) unless you explicitly set `max_pages=None` or increase the `limit` parameter.
+
+**Parameters**:
+- `limit`: Controls page size (1-25, default: 10)
+- `max_pages`: Maximum number of pages to fetch (default: 3, use `None` for unlimited)
+- `start` / `end`: ISO8601 date range filters (optional)
+
 ### Get Recovery Data
 ```python
-from whoop_sdk import Whoop
-from datetime import datetime, timedelta
-
-# Initialize and authenticate
-whoop = Whoop()
-whoop.login()
-
-# Get recent recovery data (last 10 records)
-recovery = whoop.get_recovery()
-print(f"Found {len(recovery.get('records', []))} recovery records")
-
-# Get recovery data for a specific date range
-end_date = datetime.now()
-start_date = end_date - timedelta(days=7)
-
-recovery_data = whoop.get_recovery(
-    start=start_date.isoformat() + "Z",
-    end=end_date.isoformat() + "Z",
-    limit=5
-)
+# Example with limit parameter
+recovery = whoop.get_recovery(limit=25, max_pages=1)  # Max page size, but only 1 page
+print(f"Found {len(recovery.get('records', []))} recovery records") # Will return 25 latest recovery records
 ```
 
 ### Get Sleep Data
 ```python
 from whoop_sdk import Whoop
-from datetime import datetime, timedelta
 
-# Initialize and authenticate
 whoop = Whoop()
 whoop.login()
 
-# Get recent sleep data
-sleep = whoop.get_sleep()
-print(f"Found {len(sleep.get('records', []))} sleep records")
-
-# Get sleep data for the past week
-end_date = datetime.now()
-start_date = end_date - timedelta(days=7)
-
-sleep_data = whoop.get_sleep(
-    start=start_date.isoformat() + "Z",
-    end=end_date.isoformat() + "Z",
-    limit=5
-)
+# Example with max_pages parameter
+sleep_data = whoop.get_sleep(max_pages=5)  # Fetch up to 5 pages
+print(f"Found {len(sleep_data.get('records', []))} sleep records") # Will return up to last 50 records
+```
+#### Get Single Sleep by ID
+```python
+sleep_id = sleep_data.get('records', [])[0].get('id')
+first_sleep = whoop.get_sleep_by_id(sleep_id)
+print(first_sleep)
 ```
 
 ### Get Workout Data
 ```python
-from whoop_sdk import Whoop
 from datetime import datetime, timedelta
+# Note: Even with a date range, default pagination applies: 10 records per page, max 3 pages (30 records max total)
+end_date = datetime.now()
+start_date = end_date - timedelta(days=14)
 
-# Initialize and authenticate
+workout_data = whoop.get_workouts(
+    start=start_date.isoformat() + "Z",
+    end=end_date.isoformat() + "Z"
+)
+print(f"Found {len(workout_data.get('records', []))} workout records")
+```
+
+#### Get Single Workout by ID
+```python
+workout_id = workout_data.get('records', [])[0].get('id')
+first_workout = whoop.get_workout_by_id(workout_id)
+print(first_workout)
+```
+
+
+### Get Cycles
+```python
+# Get cycles with default settings
+cycle_data = whoop.get_cycles()
+print(f"Found {len(cycles.get('records', []))} cycle records") # Should return last 30 records, but not. Inquiry open with Whoop team
+```
+
+#### Get Single Cycle by ID
+```python
+cycle_id = cycle_data.get('records', [])[0].get('id')
+first_cycle = whoop.get_cycle_by_id(cycle_id)
+print(first_cycle)
+```
+
+### Get Sleep and Recovery by Cycle ID
+
+Fetch the sleep or recovery associated with a given cycle:
+
+```python
+from whoop_sdk import Whoop
+
 whoop = Whoop()
 whoop.login()
 
-# Get recent workout data
-workouts = whoop.get_workout()
-print(f"Found {len(workouts.get('records', []))} workout records")
+# First, get a cycle ID (from get_cycles or get_cycle_by_id)
+cycles = whoop.get_cycles()
+cycle_id = cycles['records'][0]['id'] if cycles.get('records') else None
 
-# Get workout data with custom parameters
-end_date = datetime.now()
-start_date = end_date - timedelta(days=7)
-
-workout_data = whoop.get_workout(
-    start=start_date.isoformat() + "Z",
-    end=end_date.isoformat() + "Z",
-    limit=5
-)
+if cycle_id:
+    # Sleep for a specific cycle
+    sleep_for_cycle = whoop.get_sleep_by_cycle_id(cycle_id)
+    print(f"Sleep score: {sleep_for_cycle.get('score', {}).get('sleep_performance_percentage')}")
+    
+    # Recovery for a specific cycle
+    recovery_for_cycle = whoop.get_recovery_by_cycle_id(cycle_id)
+    print(f"Recovery score: {recovery_for_cycle.get('score', {}).get('recovery_score')}")
 ```
+
+## Next Steps
+
+Upcoming features we're working on:
+
+- **Rate Limit Support**: Automatic handling of API rate limits with intelligent retry logic and exponential backoff. The SDK will automatically detect rate limit responses (429) and retry requests with appropriate delays.
+
+- **Webhook Integration**: Cloud-deployable webhook receiver that listens for WHOOP events and automatically fetches new data as it becomes available. Perfect for real-time data processing and serverless deployments.
+
+- **Enhanced Error Handling**: Comprehensive error handling with custom exception classes for different error types (authentication errors, API errors, network errors, validation errors). Better error messages with context and improved handling of edge cases throughout the SDK.
+
+Stay tuned for updates!
 
 ## Open Source
 
