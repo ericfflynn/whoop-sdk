@@ -192,7 +192,7 @@ from whoop_sdk import Whoop
 whoop = Whoop()
 whoop.login()
 
-# First, get a cycle ID (from get_cycles or get_cycle_by_id)
+# First, get a cycle ID
 cycles = whoop.get_cycles()
 cycle_id = cycles['records'][0]['id'] if cycles.get('records') else None
 
